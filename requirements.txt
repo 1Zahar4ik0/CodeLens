@@ -1,0 +1,10 @@
+sentence-transformers==3.4.1
+transformers==4.48.3
+huggingface-hub==0.27.1
+torch==2.5.1
+numpy==1.26.4
+chromadb==1.0.9
+streamlit==1.45.1
+pygments==2.19.1
+tqdm==4.68.2
+watchdog==6.0.0
