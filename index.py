@@ -7,9 +7,8 @@ import chromadb
 
 if len(sys.argv) >= 2:
     base_dir = sys.argv[1]
-
 else:
-    print(f"Ошибка, введена пустая строка")
+    print("Используйте: python index.py <путь к папке>")
     sys.exit(1)
 
 if not os.path.isdir(base_dir):
@@ -29,6 +28,7 @@ def header_counter(base_dir):
     print(f"Всего найдено {len(arr_files)} py файлов")
     return arr_files
 
+
 def read_file(path):
     try:
         with open(path, 'r', encoding="utf-8") as f:
@@ -36,18 +36,89 @@ def read_file(path):
     except (UnicodeDecodeError, OSError):
         return None
 
+
 def parse_file(code, path_file):
     try:
         tree = ast.parse(code)
         return tree
     except SyntaxError:
-        print(f"ошибка синтаксиса в файле по пути: {path_file}")
+        print(f"Ошибка синтаксиса в файле: {path_file}")
+        return None
 
-TARGET_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+def extract_chunks_from_file(source, tree, relative_path):
+
+    chunks = []
+
+    for node in ast.iter_child_nodes(tree):
+
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            source_code = ast.get_source_segment(source, node)
+            if source_code is None:
+                continue
+
+            chunk_id = f"{relative_path}:{node.name}:{node.lineno}"
+            chunks.append({
+                "chunk_id":   chunk_id,
+                "name":       node.name,
+                "type":       "function",
+                "file_path":  relative_path,
+                "start_line": node.lineno,
+                "end_line":   node.end_lineno,
+                "docstring":  ast.get_docstring(node) or "",
+                "source_code": source_code,
+            })
+
+        elif isinstance(node, ast.ClassDef):
+            source_code = ast.get_source_segment(source, node)
+            if source_code is not None:
+                chunk_id = f"{relative_path}:{node.name}:{node.lineno}"
+                chunks.append({
+                    "chunk_id":   chunk_id,
+                    "name":       node.name,
+                    "type":       "class",
+                    "file_path":  relative_path,
+                    "start_line": node.lineno,
+                    "end_line":   node.end_lineno,
+                    "docstring":  ast.get_docstring(node) or "",
+                    "source_code": source_code,
+                })
+
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    method_source = ast.get_source_segment(source, item)
+                    if method_source is None:
+                        continue
+
+                    full_name = f"{node.name}.{item.name}"
+                    chunk_id  = f"{relative_path}:{full_name}:{item.lineno}"
+                    chunks.append({
+                        "chunk_id":   chunk_id,
+                        "name":       full_name,
+                        "type":       "function",
+                        "file_path":  relative_path,
+                        "start_line": item.lineno,
+                        "end_line":   item.end_lineno,
+                        "docstring":  ast.get_docstring(item) or "",
+                        "source_code": method_source,
+                    })
+
+    return chunks
+
+
+def build_embedding_text(chunk):
+    parts = [
+        f"file: {chunk['file_path']}",
+        f"{chunk['type']}: {chunk['name']}",
+    ]
+    if chunk["docstring"]:
+        parts.append(chunk["docstring"])
+    parts.append(chunk["source_code"])
+    return "\n".join(parts)
+
 
 def creating_chunks(dir):
     files_path = header_counter(dir)
-
     all_chunks = []
 
     for file_path in tqdm(files_path, desc="Индексирование файлов"):
@@ -59,49 +130,29 @@ def creating_chunks(dir):
         if tree is None:
             continue
 
-        for node in ast.walk(tree):
-            if not isinstance(node, TARGET_NODES):
-                continue
-
-            source_code = ast.get_source_segment(source, node)
-            if source_code is None:
-                continue
-
-            relative_path = os.path.relpath(file_path, dir)
-            chunk_id = f"{relative_path}::{node.name}::{node.lineno}"
-
-            all_chunks.append({
-                "chunk_id": chunk_id,
-                "name": node.name,
-                "type": "class" if isinstance(node, ast.ClassDef) else "function",
-                "file_path": relative_path,
-                "start_line": node.lineno,
-                "end_line": node.end_lineno,
-                "docstring": ast.get_docstring(node) or "",
-                "source_code": source_code,
-            })
+        relative_path = os.path.relpath(file_path, dir).replace("\\", "/")
+        chunks = extract_chunks_from_file(source, tree, relative_path)
+        all_chunks.extend(chunks)
 
     return all_chunks
 
-def build_embedding_text(chunk):
-    parts = [chunk["name"]]
-    if chunk["docstring"]:
-        parts.append(chunk["docstring"])
-    parts.append(chunk["source_code"])
-    return "\n".join(parts)
 
 chunks = creating_chunks(base_dir)
+print(f"Извлечено чанков: {len(chunks)}")
 
-model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+model = SentenceTransformer("BAAI/bge-m3")
 texts = [build_embedding_text(c) for c in chunks]
 embeddings = model.encode(texts, show_progress_bar=True, batch_size=32)
 
 client = chromadb.PersistentClient(path="./chroma_db")
-collection = client.get_or_create_collection("codelens")
+collection = client.get_or_create_collection(
+    "codelens",
+    metadata={"hnsw:space": "cosine"}
+)
 
 existing = collection.count()
 if existing > 0:
-    print(f"Всего {existing} чанков. Используй --reindex для перезаписи.")
+    print(f"В базе уже {existing} чанков. Используй --reindex для перезаписи.")
     sys.exit(0)
 
 collection.add(
@@ -117,3 +168,5 @@ collection.add(
         "docstring":  c["docstring"],
     } for c in chunks],
 )
+
+print(f"Сохранено в базу: {collection.count()} чанков.")
