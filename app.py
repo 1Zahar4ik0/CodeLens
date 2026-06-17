@@ -5,7 +5,6 @@ from search import search
 st.set_page_config(
     page_title="CodeLens",
     page_icon="🔍",
-    layout="wide"
 )
 
 st.sidebar.title("Настройки")
@@ -91,11 +90,11 @@ with tab_metrics:
             question     = item["query"]
             expected_ids = set(item["correct_chunk_ids"])
 
-            results   = search(question, top_k=5, alpha=alpha)
+            results   = search(question, top_k=5, alpha=None)
             found_ids = [r["chunk_id"] for r in results]
 
             hits      = sum(1 for fid in found_ids if fid in expected_ids)
-            precision = round(hits / 5 * 100, 1)
+            precision = round(hits / len(expected_ids) * 100, 1)
             total_precision += precision
 
             rows.append({
