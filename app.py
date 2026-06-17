@@ -4,7 +4,7 @@ from search import search
 
 st.set_page_config(
     page_title="CodeLens",
-    page_icon="🔍",
+    page_icon="",
     layout="wide"
 )
 
@@ -18,16 +18,15 @@ top_k = st.sidebar.slider(
 )
 
 alpha = st.sidebar.slider(
-    label="Баланс поиска (вектор ↔ ключевые слова)",
+    label="Баланс поиска (вектор <=> ключевые слова)",
     min_value=0.0,
     max_value=1.0,
     value=0.7,
     step=0.1,
-    help="1.0 — только векторный поиск. 0.0 — только BM25 по ключевым словам.",
+    help="1.0 — только векторный поиск. 0.0 — только по ключевым словам.",
 )
 
 tab_search, tab_metrics = st.tabs(["Поиск", "Метрики Precision@5"])
-
 
 with tab_search:
     st.title("CodeLens")
@@ -35,14 +34,14 @@ with tab_search:
     st.divider()
 
     query = st.text_input(
-        label="Введите запрос",
-        placeholder="Например: как обрабатываются ошибки авторизации?",
+        label="Введите запрос:",
+        placeholder="как обрабатываются ошибки авторизации?",
     )
 
     search_button = st.button("Найти", type="primary")
 
     if search_button and not query:
-        st.warning("Введите запрос перед поиском")
+        st.warning("Строка запроса не должна быть пустой")
 
     if search_button and query:
         with st.spinner("Ищем похожие фрагменты..."):
@@ -56,7 +55,8 @@ with tab_search:
 
             with col_info:
                 st.markdown(f"**{r['type'].capitalize()}** `{r['name']}`")
-                st.caption(f"{r['file_path']} · строки {r['start_line']}–{r['end_line']}")
+                st.caption(
+                    f"{r['file_path']} · строки {r['start_line']}–{r['end_line']}")
 
             with col_relevance:
                 st.metric(label="Релевантность", value=f"{r['relevance']}%")
@@ -69,10 +69,10 @@ with tab_search:
 
 with tab_metrics:
     st.title("Оценка качества поиска")
-    st.caption("Precision@5 — доля правильных ответов среди первых 5 результатов")
+    st.caption("Precision@5 — доля правильных ответов")
     st.divider()
 
-    eval_path  = "data/eval_questions.json"
+    eval_path = "data/eval_questions.json"
     run_button = st.button("Запустить оценку", type="primary")
 
     if run_button:
@@ -84,23 +84,23 @@ with tab_metrics:
             st.stop()
 
         total_precision = 0.0
-        rows            = []
-        progress        = st.progress(0, text="Оцениваем...")
+        rows = []
+        progress = st.progress(0, text="Оцениваем...")
 
         for i, item in enumerate(questions):
-            question     = item["query"]
+            question = item["query"]
             expected_ids = set(item["correct_chunk_ids"])
 
-            results   = search(question, top_k=5, alpha=alpha)
+            results = search(question, top_k=5, alpha=alpha)
             found_ids = [r["chunk_id"] for r in results]
 
-            hits      = sum(1 for fid in found_ids if fid in expected_ids)
+            hits = sum(1 for fid in found_ids if fid in expected_ids)
             precision = round(hits / 5 * 100, 1)
             total_precision += precision
 
             rows.append({
                 "Вопрос":      question,
-                "Попаданий":   f"{hits} / 5",
+                "Попаданий":   f"{hits}/5",
                 "Precision@5": f"{precision}%",
             })
 
@@ -112,22 +112,22 @@ with tab_metrics:
         progress.empty()
 
         overall = round(total_precision / len(questions), 1)
-        target  = 60.0
+        target = 60.0
 
         col_metric, col_target = st.columns(2)
         with col_metric:
             st.metric(
                 label="Итоговый Precision@5",
                 value=f"{overall}%",
-                delta=f"{round(overall - target, 1)}% от цели",
+                delta=f"{round(overall - target, 1)}% до цели",
             )
         with col_target:
             st.metric(label="Целевое значение", value="60%")
 
         if overall >= target:
-            st.success(f"Цель достигнута! {overall}% ≥ 60%")
+            st.success(f"Победа, {overall}% ≥ 60%")
         else:
-            st.error(f"Цель не достигнута. {overall}% < 60%")
+            st.error(f"Поражение, {overall}% < 60%")
 
         st.divider()
         st.subheader("Детали по каждому вопросу")
