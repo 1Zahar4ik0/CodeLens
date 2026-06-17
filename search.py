@@ -10,22 +10,21 @@ def _load_model():
 
 model = _load_model()
 
-client = chromadb.PersistentClient(path="./chroma_db")
+client     = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_collection("codelens")
 
-_all = collection.get(include=["documents", "metadatas"])
-_all_ids = _all["ids"]
-_all_docs = _all["documents"]
+_all       = collection.get(include=["documents", "metadatas"])
+_all_ids   = _all["ids"]
+_all_docs  = _all["documents"]
 _all_metas = _all["metadatas"]
 
 _tokenized = [doc.lower().split() for doc in _all_docs]
-_bm25 = BM25Okapi(_tokenized)
-
+_bm25      = BM25Okapi(_tokenized)
 
 def _normalize(scores: list[float]) -> list[float]:
     lo, hi = min(scores), max(scores)
     if hi == lo:
-        return [1.0] * len(scores)
+        return [0.0] * len(scores)
     return [(s - lo) / (hi - lo) for s in scores]
 
 
@@ -49,19 +48,19 @@ def search(query: str, top_k: int = 5, alpha: float = None) -> list[dict]:
 
     total = collection.count()
 
-    query_vector = model.encode([query])[0]
+    query_vector   = model.encode([query])[0]
     vector_results = collection.query(
         query_embeddings=[query_vector.tolist()],
         n_results=total,
         include=["documents", "metadatas", "distances"],
     )
 
-    vec_ids = vector_results["ids"][0]
+    vec_ids       = vector_results["ids"][0]
     vec_distances = vector_results["distances"][0]
     vec_metadatas = vector_results["metadatas"][0]
     vec_documents = vector_results["documents"][0]
 
-    vec_scores = [1 - d / 2 for d in vec_distances]
+    vec_scores      = [1 - d / 2 for d in vec_distances]
     vec_scores_norm = _normalize(vec_scores)
 
     bm25_scores = _bm25.get_scores(query.lower().split()).tolist()
@@ -71,13 +70,21 @@ def search(query: str, top_k: int = 5, alpha: float = None) -> list[dict]:
 
     combined = []
     for i, chunk_id in enumerate(vec_ids):
-        bm25_score = id_to_bm25.get(chunk_id, 0.0)
+        bm25_score  = id_to_bm25.get(chunk_id, 0.0)
         final_score = alpha * vec_scores_norm[i] + (1 - alpha) * bm25_score
 
         meta = vec_metadatas[i]
         combined.append({
             "chunk_id":    chunk_id,
+            "chunk_id":    chunk_id,
             "source_code": vec_documents[i],
+            "name":        meta["name"],
+            "type":        meta["type"],
+            "file_path":   meta["file_path"],
+            "start_line":  meta["start_line"],
+            "end_line":    meta["end_line"],
+            "docstring":   meta["docstring"],
+            "relevance":   round(final_score * 100, 1),
             "name":        meta["name"],
             "type":        meta["type"],
             "file_path":   meta["file_path"],
