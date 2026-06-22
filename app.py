@@ -1,13 +1,14 @@
 import json
 import streamlit as st
 
+from search import search
+from answerLLM import generate_rag_answer_stream
+
 st.set_page_config(
     page_title="CodeLens",
     page_icon="",
     layout="wide"
 )
-
-from search import search
 
 
 def _chunks_match(predicted: str, reference: str, tolerance: int = 2) -> bool:
@@ -34,6 +35,7 @@ def _count_matches(found_ids: list[str], correct: list[str]) -> int:
                 break
     return hits
 
+
 st.sidebar.title("Настройки")
 
 top_k = st.sidebar.slider(
@@ -50,6 +52,12 @@ alpha = st.sidebar.slider(
     value=0.7,
     step=0.1,
     help="1.0 — только векторный поиск. 0.0 — только по ключевым словам.",
+)
+
+enable_llm = st.sidebar.checkbox(
+    label="Включить AI-анализ",
+    value=False,
+    help="Генерировать связный ответ на основе найденных фрагментов кода"
 )
 
 tab_search, tab_metrics = st.tabs(["Поиск", "Метрики Precision@5"])
@@ -76,6 +84,7 @@ with tab_search:
         st.markdown(f"Найдено результатов: **{len(results)}**")
         st.divider()
 
+        # Отображение результатов поиска
         for r in results:
             col_info, col_relevance = st.columns([4, 1])
 
@@ -92,6 +101,21 @@ with tab_search:
 
             st.code(r["source_code"], language="python")
             st.divider()
+
+        # LLM-анализ
+        if enable_llm and results:
+            st.markdown("---")
+            st.subheader("Анализ от ИИ")
+            st.caption("Нейросеть анализирует найденные фрагменты и формирует связаный ответ...")
+            
+            answer_placeholder = st.empty()
+            full_answer = ""
+
+            for token in generate_rag_answer_stream(query, results):
+                full_answer += token
+                answer_placeholder.markdown(full_answer + "▌")
+
+            answer_placeholder.markdown(full_answer)
 
 with tab_metrics:
     st.title("Оценка качества поиска")
