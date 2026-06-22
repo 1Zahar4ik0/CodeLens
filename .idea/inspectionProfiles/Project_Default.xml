@@ -1,0 +1,22 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="sentence-transformers" />
+          <option value="transformers" />
+          <option value="huggingface-hub" />
+          <option value="torch" />
+          <option value="numpy" />
+          <option value="chromadb" />
+          <option value="streamlit" />
+          <option value="pygments" />
+          <option value="tqdm" />
+          <option value="rank-bm25" />
+          <option value="watchdog" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

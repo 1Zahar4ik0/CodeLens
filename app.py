@@ -1,12 +1,38 @@
 import json
 import streamlit as st
-from search import search
 
 st.set_page_config(
     page_title="CodeLens",
     page_icon="",
     layout="wide"
 )
+
+from search import search
+
+
+def _chunks_match(predicted: str, reference: str, tolerance: int = 2) -> bool:
+    p_parts = predicted.rsplit(":", 2)
+    r_parts = reference.rsplit(":", 2)
+    if len(p_parts) != 3 or len(r_parts) != 3:
+        return False
+    try:
+        return (p_parts[0] == r_parts[0]
+                and p_parts[1] == r_parts[1]
+                and abs(int(p_parts[2]) - int(r_parts[2])) <= tolerance)
+    except ValueError:
+        return False
+
+
+def _count_matches(found_ids: list[str], correct: list[str]) -> int:
+    used = set()
+    hits = 0
+    for pred in found_ids:
+        for j, ref in enumerate(correct):
+            if j not in used and _chunks_match(pred, ref):
+                hits += 1
+                used.add(j)
+                break
+    return hits
 
 st.sidebar.title("Настройки")
 
@@ -89,18 +115,19 @@ with tab_metrics:
 
         for i, item in enumerate(questions):
             question = item["query"]
-            expected_ids = set(item["correct_chunk_ids"])
+            correct = item["correct_chunk_ids"]
 
             results = search(question, top_k=5, alpha=alpha)
             found_ids = [r["chunk_id"] for r in results]
 
-            hits = sum(1 for fid in found_ids if fid in expected_ids)
-            precision = round(hits / 5 * 100, 1)
+            hits = _count_matches(found_ids, correct)
+            n = min(5, len(correct))
+            precision = round(hits / n * 100, 1)
             total_precision += precision
 
             rows.append({
                 "Вопрос":      question,
-                "Попаданий":   f"{hits}/5",
+                "Попаданий":   f"{hits}/{len(correct)}",
                 "Precision@5": f"{precision}%",
             })
 
