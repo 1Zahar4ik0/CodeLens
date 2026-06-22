@@ -35,6 +35,3 @@ def evaluate_precision(eval_data, top_k: int = 5):
             "hits": hits,
             "precision@5": precision
         })
-
-
-        

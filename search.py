@@ -1,11 +1,12 @@
+import json
+import streamlit as st
 import chromadb
-from sentence_transformers import SentenceTransformer
-from rank_bm25 import BM25Okapi
+from FlagEmbedding import BGEM3FlagModel
 
 
 @st.cache_resource
 def _load_model():
-    return SentenceTransformer("BAAI/bge-m3")
+    return BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
 
 
 model = _load_model()
@@ -13,13 +14,8 @@ model = _load_model()
 client     = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_collection("codelens")
 
-_all       = collection.get(include=["documents", "metadatas"])
-_all_ids   = _all["ids"]
-_all_docs  = _all["documents"]
-_all_metas = _all["metadatas"]
-
-_tokenized = [doc.lower().split() for doc in _all_docs]
-_bm25      = BM25Okapi(_tokenized)
+with open("./chroma_db/sparse_vectors.json", "r", encoding="utf-8") as f:
+    _sparse_index = json.load(f)
 
 def _normalize(scores: list[float]) -> list[float]:
     lo, hi = min(scores), max(scores)
@@ -46,12 +42,15 @@ def search(query: str, top_k: int = 5, alpha: float = None) -> list[dict]:
     if alpha is None:
         alpha = _auto_alpha(query)
 
-    total = collection.count()
+    n_candidates = min(max(top_k * 6, 30), collection.count())
 
-    query_vector   = model.encode([query])[0]
+    out = model.encode([query], return_dense=True, return_sparse=True)
+    query_vector = out["dense_vecs"][0]
+    query_sparse = out["lexical_weights"][0]
+
     vector_results = collection.query(
         query_embeddings=[query_vector.tolist()],
-        n_results=total,
+        n_results=n_candidates,
         include=["documents", "metadatas", "distances"],
     )
 
@@ -63,28 +62,22 @@ def search(query: str, top_k: int = 5, alpha: float = None) -> list[dict]:
     vec_scores      = [1 - d / 2 for d in vec_distances]
     vec_scores_norm = _normalize(vec_scores)
 
-    bm25_scores = _bm25.get_scores(query.lower().split()).tolist()
-    bm25_scores_norm = _normalize(bm25_scores)
-    id_to_bm25 = {_all_ids[i]: bm25_scores_norm[i]
-                  for i in range(len(_all_ids))}
+    sparse_scores = [
+        model.compute_lexical_matching_score(
+            query_sparse, _sparse_index.get(chunk_id, {})
+        )
+        for chunk_id in vec_ids
+    ]
+    sparse_scores_norm = _normalize(sparse_scores)
 
     combined = []
     for i, chunk_id in enumerate(vec_ids):
-        bm25_score  = id_to_bm25.get(chunk_id, 0.0)
-        final_score = alpha * vec_scores_norm[i] + (1 - alpha) * bm25_score
+        final_score = alpha * vec_scores_norm[i] + (1 - alpha) * sparse_scores_norm[i]
 
         meta = vec_metadatas[i]
         combined.append({
             "chunk_id":    chunk_id,
-            "chunk_id":    chunk_id,
             "source_code": vec_documents[i],
-            "name":        meta["name"],
-            "type":        meta["type"],
-            "file_path":   meta["file_path"],
-            "start_line":  meta["start_line"],
-            "end_line":    meta["end_line"],
-            "docstring":   meta["docstring"],
-            "relevance":   round(final_score * 100, 1),
             "name":        meta["name"],
             "type":        meta["type"],
             "file_path":   meta["file_path"],
@@ -103,4 +96,4 @@ if __name__ == "__main__":
         alpha = _auto_alpha(query)
         print(f"\nЗапрос: {query}  (alpha={alpha})")
         for r in search(query, top_k=3):
-            print(f"  [{r['relevance']}%] {r['file_path']} → {r['name']}")
+            print(f"  [{r['relevance']}%] {r['file_path']} -> {r['name']}")
