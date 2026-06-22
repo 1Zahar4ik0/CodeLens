@@ -1,106 +1,103 @@
+import os
 import chromadb
-from sentence_transformers import SentenceTransformer
+import streamlit as st
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
-
+from scipy.special import expit
+import torch
+import time
 
 @st.cache_resource
-def _load_model():
-    return SentenceTransformer("BAAI/bge-m3")
+def load_models():
+    embedder = SentenceTransformer("BAAI/bge-m3")
+
+    reranker = CrossEncoder(
+        "BAAI/bge-reranker-v2-m3",  # cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+        max_length=256,
+        device="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    return embedder, reranker
 
 
-model = _load_model()
+embedder, reranker = load_models()
 
-client     = chromadb.PersistentClient(path="./chroma_db")
+client = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_collection("codelens")
 
-_all       = collection.get(include=["documents", "metadatas"])
-_all_ids   = _all["ids"]
-_all_docs  = _all["documents"]
+_all = collection.get(include=["documents", "metadatas"])
+_all_ids = _all["ids"]
+_all_docs = _all["documents"]
 _all_metas = _all["metadatas"]
 
 _tokenized = [doc.lower().split() for doc in _all_docs]
-_bm25      = BM25Okapi(_tokenized)
-
-def _normalize(scores: list[float]) -> list[float]:
-    lo, hi = min(scores), max(scores)
-    if hi == lo:
-        return [0.0] * len(scores)
-    return [(s - lo) / (hi - lo) for s in scores]
+_bm25 = BM25Okapi(_tokenized)
 
 
-def _is_russian(text: str) -> bool:
+def search(query: str, top_k: int = 5) -> list[dict]:
+    candidate_k = 15
 
-    if not text:
-        return False
-    russian = sum(1 for c in text if '\u0400' <= c <= '\u04FF')
-    return russian / len(text) > 0.2
-
-
-def _auto_alpha(query: str) -> float:
-
-    return 0.9 if _is_russian(query) else 0.5
-
-
-def search(query: str, top_k: int = 5, alpha: float = None) -> list[dict]:
-
-    if alpha is None:
-        alpha = _auto_alpha(query)
-
-    total = collection.count()
-
-    query_vector   = model.encode([query])[0]
-    vector_results = collection.query(
+    query_vector = embedder.encode([query])[0]
+    vec_results = collection.query(
         query_embeddings=[query_vector.tolist()],
-        n_results=total,
+        n_results=candidate_k,
         include=["documents", "metadatas", "distances"],
     )
 
-    vec_ids       = vector_results["ids"][0]
-    vec_distances = vector_results["distances"][0]
-    vec_metadatas = vector_results["metadatas"][0]
-    vec_documents = vector_results["documents"][0]
+    bm25_scores = _bm25.get_scores(query.lower().split())
+    bm25_top_indices = bm25_scores.argsort()[::-1][:candidate_k]
 
-    vec_scores      = [1 - d / 2 for d in vec_distances]
-    vec_scores_norm = _normalize(vec_scores)
+    candidate_ids = set(vec_results["ids"][0])
+    for idx in bm25_top_indices:
+        candidate_ids.add(_all_ids[idx])
+    candidate_ids = list(candidate_ids)
 
-    bm25_scores = _bm25.get_scores(query.lower().split()).tolist()
-    bm25_scores_norm = _normalize(bm25_scores)
-    id_to_bm25 = {_all_ids[i]: bm25_scores_norm[i]
-                  for i in range(len(_all_ids))}
+    candidate_docs = []
+    candidate_metas = []
+    for cid in candidate_ids:
+        idx = _all_ids.index(cid)
+        candidate_docs.append(_all_docs[idx])
+        candidate_metas.append(_all_metas[idx])
 
+    pairs = [[query, doc] for doc in candidate_docs]
+    logits = reranker.predict(pairs)  # Сырые логиты
+
+    probabilities = expit(logits)
+
+    # ШАГ 3: Сборка и сортировка результатов
     combined = []
-    for i, chunk_id in enumerate(vec_ids):
-        bm25_score  = id_to_bm25.get(chunk_id, 0.0)
-        final_score = alpha * vec_scores_norm[i] + (1 - alpha) * bm25_score
-
-        meta = vec_metadatas[i]
+    for i in range(len(candidate_ids)):
+        meta = candidate_metas[i]
         combined.append({
-            "chunk_id":    chunk_id,
-            "chunk_id":    chunk_id,
-            "source_code": vec_documents[i],
-            "name":        meta["name"],
-            "type":        meta["type"],
-            "file_path":   meta["file_path"],
-            "start_line":  meta["start_line"],
-            "end_line":    meta["end_line"],
-            "docstring":   meta["docstring"],
-            "relevance":   round(final_score * 100, 1),
-            "name":        meta["name"],
-            "type":        meta["type"],
-            "file_path":   meta["file_path"],
-            "start_line":  meta["start_line"],
-            "end_line":    meta["end_line"],
-            "docstring":   meta["docstring"],
-            "relevance":   round(final_score * 100, 1),
+            "chunk_id":    candidate_ids[i],
+            "source_code": candidate_docs[i],
+            "name":        meta.get("name", "Unknown"),
+            "type":        meta.get("type", "Unknown"),
+            "file_path":   meta.get("file_path", "Unknown"),
+            "start_line":  meta.get("start_line", 0),
+            "end_line":    meta.get("end_line", 0),
+            "docstring":   meta.get("docstring", ""),
+            "relevance":   round(float(probabilities[i]) * 100, 1)
         })
 
+    # Сортируем по убыванию вероятности
     combined.sort(key=lambda x: x["relevance"], reverse=True)
+
     return combined[:top_k]
 
 
 if __name__ == "__main__":
-    for query in ["как создаётся токен доступа", "how does JWT verification work"]:
-        alpha = _auto_alpha(query)
-        print(f"\nЗапрос: {query}  (alpha={alpha})")
-        for r in search(query, top_k=3):
-            print(f"  [{r['relevance']}%] {r['file_path']} → {r['name']}")
+    test_queries = [
+        "как создаётся токен доступа",
+        "how does JWT verification work",
+        "где проверяется суперпользователь"
+    ]
+
+    for q in test_queries:
+        start = time.time()
+        results = search(q, top_k=3)
+        latency = time.time() - start
+
+        print(f"\n⏱️ Latency: {latency:.3f} сек. | Запрос: '{q}'")
+        for i, r in enumerate(results, 1):
+            print(
+                f"  {i}. [{r['relevance']:.1f}%] {r['file_path']} → {r['name']}")
