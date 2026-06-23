@@ -1,6 +1,7 @@
 import sys
 import os
 import ast
+import re
 import json
 import argparse
 from tqdm import tqdm
@@ -21,14 +22,19 @@ if not os.path.isdir(base_dir):
 
 def header_counter(base_dir):
     arr_files = []
+    py_count = 0
+    js_count = 0
 
     for root, dirs, files in os.walk(base_dir):
         for file in files:
             if file.endswith('.py'):
-                path_file = os.path.join(root, file)
-                arr_files.append(path_file)
+                arr_files.append(os.path.join(root, file))
+                py_count += 1
+            elif file.endswith('.js'):
+                arr_files.append(os.path.join(root, file))
+                js_count += 1
 
-    print(f"Всего найдено {len(arr_files)} py файлов")
+    print(f"Всего найдено файлов: {py_count} .py, {js_count} .js")
     return arr_files
 
 def read_file(path):
@@ -84,23 +90,96 @@ def _collect_from_body(body, source, relative_path, class_name=None):
                 chunks.append(chunk)
     return chunks
 
+
+def parse_python_chunks(source, relative_path, file_path):
+    tree = parse_file(source, file_path)
+    if tree is None:
+        return []
+    return _collect_from_body(tree.body, source, relative_path)
+
+_JS_PATTERNS = [
+    re.compile(r'^(?:export\s+)?class\s+(\w+)(?:\s+extends\s+\w+)?\s*\{', re.MULTILINE),
+
+    re.compile(r'^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(', re.MULTILINE),
+
+    re.compile(r'^(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(.*?\)\s*=>|\bfunction\b)', re.MULTILINE),
+
+    re.compile(r'^\s{2,}(?:async\s+)?(\w+)\s*\([^)]*\)\s*\{', re.MULTILINE),
+]
+
+
+def _extract_block(source, start_pos):
+    depth = 0
+    i = start_pos
+
+    while i < len(source):
+        if source[i] == '{':
+            depth += 1
+        elif source[i] == '}':
+            depth -= 1
+            if depth == 0:
+                block = source[start_pos:i + 1]
+                end_line = source[:i].count('\n') + 1
+                return block, end_line
+        i += 1
+    return source[start_pos:], source.count('\n') + 1
+
+
+def parse_js_chunks(source, relative_path):
+    chunks = []
+    lines = source.splitlines()
+    seen_positions = set()
+
+    for pattern in _JS_PATTERNS:
+        for match in pattern.finditer(source):
+            name = match.group(1)
+            if name in ('if', 'for', 'while', 'switch', 'catch', 'return'):
+                continue
+
+            start_line = source[:match.start()].count('\n') + 1
+
+            brace_pos = source.find('{', match.start())
+            if brace_pos == -1:
+                continue
+            if brace_pos in seen_positions:
+                continue
+            seen_positions.add(brace_pos)
+
+            source_code, end_line = _extract_block(source, brace_pos)
+            if end_line - start_line < 1:
+                continue
+
+            chunk_id = f"{relative_path}:{name}:{start_line}"
+
+            chunks.append({
+                "chunk_id":   chunk_id,
+                "name":       name,
+                "type":       "class" if "class" in match.group(0) else "function",
+                "file_path":  relative_path,
+                "start_line": start_line,
+                "end_line":   end_line,
+                "docstring":  "",
+                "source_code": source_code[:2000],
+            })
+
+    return chunks
+
 def creating_chunks(dir):
     files_path = header_counter(dir)
-
     all_chunks = []
 
-    for file_path in tqdm(files_path, desc="Индексирование файлов:"):
+    for file_path in tqdm(files_path, desc="Индексирование файлов"):
         source = read_file(file_path)
         if source is None:
             continue
 
-        tree = parse_file(source, file_path)
-        if tree is None:
-            continue
+        relative_path = os.path.relpath(file_path, dir).replace(os.sep, "/")
 
-        relative_path = os.path.relpath(file_path, dir)
-        relative_path = relative_path.replace(os.sep, "/")
-        all_chunks.extend(_collect_from_body(tree.body, source, relative_path))
+        if file_path.endswith('.py'):
+            all_chunks.extend(parse_python_chunks(source, relative_path, file_path))
+
+        elif file_path.endswith('.js'):
+            all_chunks.extend(parse_js_chunks(source, relative_path))
 
     return all_chunks
 
@@ -114,7 +193,7 @@ def build_embedding_text(chunk):
 chunks = creating_chunks(base_dir)
 
 model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
-texts = [build_embedding_text(chunk) for chunk in chunks]
+texts = [build_embedding_text(c) for c in chunks]
 output = model.encode(
     texts,
     batch_size=12,
@@ -143,19 +222,20 @@ collection.add(
     embeddings=embeddings.tolist(),
     documents=[chunk["source_code"] for chunk in chunks],
     metadatas=[{
-        "name": chunk["name"],
-        "type": chunk["type"],
-        "file_path": chunk["file_path"],
+        "name":       chunk["name"],
+        "type":       chunk["type"],
+        "file_path":  chunk["file_path"],
         "start_line": chunk["start_line"],
-        "end_line": chunk["end_line"],
-        "docstring": chunk["docstring"],
+        "end_line":   chunk["end_line"],
+        "docstring":  chunk["docstring"],
     } for chunk in chunks],
 )
 
 sparse_path = os.path.join("./chroma_db", "sparse_vectors.json")
 sparse_map = {
-    chunk["chunk_id"]: {k: float(v) for k, v in sv.items()}
-    for chunk, sv in zip(chunks, sparse_vecs)
+    c["chunk_id"]: {k: float(v) for k, v in sv.items()}
+    for c, sv in zip(chunks, sparse_vecs)
 }
 with open(sparse_path, "w", encoding="utf-8") as f:
     json.dump(sparse_map, f)
+print(f"Готово. Проиндексировано чанков: {len(chunks)}")
