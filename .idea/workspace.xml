@@ -3,10 +3,8 @@
   <component name="ChangeListManager">
     <list default="true" id="14a170de-a0e1-4342-afb4-f68bdd15c499" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/9447ac42-354a-40ae-9bae-a2ac30305186/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/9447ac42-354a-40ae-9bae-a2ac30305186/length.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/sparse_vectors.json" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/sparse_vectors.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/index.py" beforeDir="false" afterPath="$PROJECT_DIR$/index.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval.py" beforeDir="false" afterPath="$PROJECT_DIR$/eval.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/search.py" beforeDir="false" afterPath="$PROJECT_DIR$/search.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

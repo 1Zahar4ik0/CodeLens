@@ -2,11 +2,9 @@ import json
 import time
 from search import search
 
-
 def load_eval_data(filepath):
     with open(filepath, 'r', encoding="utf-8") as f:
         return json.load(f)
-
 
 def evaluate_precision(eval_data, top_k: int = 5):
 
@@ -49,7 +47,6 @@ def evaluate_precision(eval_data, top_k: int = 5):
     return {"results": results,
             "avg_precision": avg_prec,
             "avg_latency": avg_lat}
-
 
 def print_console_report(report):
     avg_prec = report["avg_precision@5"]

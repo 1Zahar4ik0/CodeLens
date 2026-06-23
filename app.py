@@ -1,15 +1,16 @@
 import json
 import streamlit as st
 
-from search import search
 from answerLLM import generate_rag_answer_stream
 
 st.set_page_config(
     page_title="CodeLens",
+    # page_icon="RostelecomLogo.png",
     page_icon="",
     layout="wide"
 )
 
+from search import search
 
 def _chunks_match(predicted: str, reference: str, tolerance: int = 2) -> bool:
     p_parts = predicted.rsplit(":", 2)
@@ -23,7 +24,6 @@ def _chunks_match(predicted: str, reference: str, tolerance: int = 2) -> bool:
     except ValueError:
         return False
 
-
 def _count_matches(found_ids: list[str], correct: list[str]) -> int:
     used = set()
     hits = 0
@@ -34,7 +34,6 @@ def _count_matches(found_ids: list[str], correct: list[str]) -> int:
                 used.add(j)
                 break
     return hits
-
 
 st.sidebar.title("Настройки")
 
@@ -64,7 +63,7 @@ tab_search, tab_metrics = st.tabs(["Поиск", "Метрики Precision@5"])
 
 with tab_search:
     st.title("CodeLens")
-    st.caption("Умный поиск по кодовой базе на естественном языке")
+    st.caption("Умный поиск по кодовой базе")
     st.divider()
 
     query = st.text_input(
@@ -84,7 +83,6 @@ with tab_search:
         st.markdown(f"Найдено результатов: **{len(results)}**")
         st.divider()
 
-        # Отображение результатов поиска
         for r in results:
             col_info, col_relevance = st.columns([4, 1])
 
@@ -102,7 +100,6 @@ with tab_search:
             st.code(r["source_code"], language="python")
             st.divider()
 
-        # LLM-анализ
         if enable_llm and results:
             st.markdown("---")
             st.subheader("Анализ от ИИ")

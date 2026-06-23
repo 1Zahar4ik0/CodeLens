@@ -82,10 +82,9 @@ def search(query: str, top_k: int = 5, alpha: float = None):
     combined.sort(key=lambda x: x["relevance"], reverse=True)
     return combined[:top_k]
 
-
-if __name__ == "__main__":
-    for query in ["как создаётся токен доступа", "how does JWT verification work"]:
-        alpha = _auto_alpha(query)
-        print(f"\nЗапрос: {query}  (alpha={alpha})")
-        for r in search(query, top_k=3):
-            print(f"  [{r['relevance']}%] {r['file_path']} → {r['name']}")
+# if __name__ == "__main__":
+#     for query in ["как создаётся токен доступа", "how does JWT verification work"]:
+#         alpha = _auto_alpha(query)
+#         print(f"\nЗапрос: {query}  (alpha={alpha})")
+#         for r in search(query, top_k=3):
+#             print(f"  [{r['relevance']}%] {r['file_path']} → {r['name']}")
