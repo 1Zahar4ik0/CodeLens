@@ -5,8 +5,7 @@ from answerLLM import generate_rag_answer_stream
 
 st.set_page_config(
     page_title="CodeLens",
-    # page_icon="RostelecomLogo.png",
-    page_icon="",
+    page_icon="RostelecomLogo.png",
     layout="wide"
 )
 

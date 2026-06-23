@@ -1,4 +1,4 @@
-FROM python:3.12
+FROM python:3.12-bookworm
 
 ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/app/.cache/huggingface
