@@ -83,7 +83,6 @@ def print_console_report(report):
 
     print("=" * 100)
 
-
 if __name__ == "__main__":
     eval_data = "data/eval_questions.json"
 

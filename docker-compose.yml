@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  codelens:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./data:/app/data
+      - ./.cache:/app/.cache/huggingface
+    environment:
+      - HF_HOME=/app/.cache/huggingface
+    restart: unless-stopped
+
+  indexer:
+    build: .
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./data:/app/data
+      - ./.cache:/app/.cache/huggingface
+    environment:
+      - HF_HOME=/app/.cache/huggingface
+    command: python index.py data/codebase_python/gymhero --reindex
+    profiles:
+      - index
