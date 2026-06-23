@@ -2,5 +2,10 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/data/codebase_python/Discord-bot-Arvent" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/data/codebase_python/Discord-bot-Verant" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/data/codebase_python/VTB_Multibanking" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/data/codebase_python/encryptor_voice" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/data/codebase_python/task-semifinal-future-trajectory" vcs="Git" />
   </component>
 </project>
