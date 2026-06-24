@@ -19,6 +19,6 @@ services:
       - ./.cache:/app/.cache/huggingface
     environment:
       - HF_HOME=/app/.cache/huggingface
-    command: python index.py data/codebase_python/gymhero --reindex
+    command: python index.py data/codebase_python --reindex
     profiles:
       - index
