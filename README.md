@@ -263,31 +263,3 @@ CODELENS/
     ├── sparse_vectors.json
     └── <collection_uuid>/
 ```
-
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python index.py data/codebase_python
-streamlit run app.py
-
-python index.py data/codebase_python --reindex
-
-c докер:
-docker compose build
-docker compose --profile index run --rm indexer
-docker compose up
-
-остановка:
-docker compose down
-docker compose down --volumes
-
-переиндексация:
-docker compose down
-docker compose --profile index run --rm indexer
-docker compose up
-
-как в проекте создаётся токен доступа и какой срок его жизни?
-how does the project verify a JWT token from an incoming request?
-
-как проект проверяет токен JWT на основе входящего запроса?
-(JWT (JSON Web Token) — это открытый стандарт (закреплён в RFC 7519), который позволяет безопасно передавать данные между сторонами в виде компактного JSON-объекта)
