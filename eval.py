@@ -38,15 +38,15 @@ def evaluate_precision(eval_data, top_k: int = 5):
             "predicted_ids": predicted_chunk_ids,
             "hits": hits,
             "precision@5": precision,
-            "latency": round(latency, 3)
+            "latency_sec": round(latency, 3)
         })
 
     avg_prec = total_prec / len(eval_data)
     avg_lat = total_lat / len(eval_data)
 
     return {"results": results,
-            "avg_precision": avg_prec,
-            "avg_latency": avg_lat}
+            "avg_precision@5": avg_prec,
+            "avg_latency_sec": avg_lat}
 
 def print_console_report(report):
     avg_prec = report["avg_precision@5"]
@@ -84,7 +84,7 @@ def print_console_report(report):
     print("=" * 100)
 
 if __name__ == "__main__":
-    eval_data = "data/eval_questions.json"
+    eval_data = load_eval_data("data/eval_questions.json")
 
     report = evaluate_precision(eval_data=eval_data)
 

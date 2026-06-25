@@ -63,11 +63,22 @@ ollama pull mistral:7b
 ### Индексирование + запуск UI одной командой:
  
 ```bash
+
+docker compose build
 # Сначала индексируем (профиль index)
-docker compose --profile index up indexer
+docker compose --profile index run --rm indexer
  
 # Затем запускаем UI
 docker compose up codelens
+
+#остновка и удаление всех данных
+docker compose down
+docker compose down --volumes
+
+#переиндексация
+docker compose down
+docker compose --profile index run --rm indexer
+docker compose up
 ```
  
 Приложение будет доступно на `http://localhost:8501`. Директории `chroma_db/` и `data/` монтируются как volumes, поэтому индекс сохраняется между перезапусками.
