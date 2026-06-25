@@ -165,30 +165,23 @@ python eval.py
 
 ## Метрики качества
 
-1. как в проекте создаётся токен доступа и какой срок его жизни?
+### 1. Как создаётся токен доступа и каков срок его жизни?
 
+```python
 def create_access_token(subject: str | int, expires_minutes: int | None = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes or settings.access_token_expire_minutes
     )
     payload = {"sub": str(subject), "exp": expire}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+```
 
-2. how does the project verify a JWT token from an incoming request?
+---
 
+### 2. Как проект проверяет JWT-токен из входящего запроса?
+
+```python
 def get_token(token: str = Depends(oauth2_scheme)) -> TokenPayload:
-    """
-    Retrieve the token payload from the provided JWT token.
-
-    Parameters:
-        token (str, optional): The JWT token. Defaults to the value returned by the `oauth2_scheme` dependency.
-
-    Returns:
-        TokenPayload: The decoded token payload.
-
-    Raises:
-        HTTPException: If there is an error decoding the token or validating the payload.
-    """
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -197,40 +190,26 @@ def get_token(token: str = Depends(oauth2_scheme)) -> TokenPayload:
     except (jwt.JWTError, ValidationError) as e:
         raise _get_credential_exception(status_code=status.HTTP_403_FORBIDDEN) from e
     return token_data
+```
 
-3. как в проекте реализована пагинация при получении списка объектов?
+---
 
-def get_pagination_params(skip: int = Query(0, ge=0), limit: int = Query(10, gt=0)) -> Tuple[int, int]:
-    """
-    Get the pagination parameters.
+### 3. Как реализована пагинация при получении списка объектов?
 
-    Parameters:
-        skip (int): The number of items to skip. Defaults to 0.
-        limit (int): The maximum number of items to return. Defaults to 10.
-
-    Returns:
-        Tuple[int, int]: A tuple containing the skip and limit values.
-    """
+```python
+def get_pagination_params(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, gt=0),
+) -> Tuple[int, int]:
     return skip, limit
+```
 
-4. how does the project handle database session lifecycle for requests?
+---
 
+### 4. Как управляется жизненным циклом сессии базы данных?
+
+```python
 def get_ctx_db(database_url: str) -> Generator:
-    """
-    Context manager that creates a database session and yields
-    it for use in a 'with' statement.
-
-    Parameters:
-        database_url (str): The URL of the database to connect to.
-
-    Yields:
-        Generator: A database session.
-
-    Raises:
-        Exception: If an error occurs while getting the database session.
-
-    """
-    log.debug("getting database session")
     db = get_local_session(database_url)()
     try:
         yield db
@@ -238,14 +217,21 @@ def get_ctx_db(database_url: str) -> Generator:
         log.error("An error occurred while getting the database session. Error: %s", e)
         raise SQLAlchemyException from e
     finally:
-        log.debug("closing database session")
         db.close()
+```
 
-5. где и как проект проверяет что пользователь является владельцем ресурса перед удалением?
+---
 
+### 5. Как проект проверяет, является ли пользователь владельцем ресурса перед удалением?
+
+```python
 def _is_admin(self, interaction: discord.Interaction) -> bool:
-        """Проверка является ли пользователь администратором"""
-        return interaction.user.guild_permissions.administrator or interaction.user.id == self.bot.owner_id
+    """Проверка, является ли пользователь администратором."""
+    return (
+        interaction.user.guild_permissions.administrator
+        or interaction.user.id == self.bot.owner_id
+    )
+```
 
 ## Структура проекта
 
@@ -277,3 +263,31 @@ CODELENS/
     ├── sparse_vectors.json
     └── <collection_uuid>/
 ```
+
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python index.py data/codebase_python
+streamlit run app.py
+
+python index.py data/codebase_python --reindex
+
+c докер:
+docker compose build
+docker compose --profile index run --rm indexer
+docker compose up
+
+остановка:
+docker compose down
+docker compose down --volumes
+
+переиндексация:
+docker compose down
+docker compose --profile index run --rm indexer
+docker compose up
+
+как в проекте создаётся токен доступа и какой срок его жизни?
+how does the project verify a JWT token from an incoming request?
+
+как проект проверяет токен JWT на основе входящего запроса?
+(JWT (JSON Web Token) — это открытый стандарт (закреплён в RFC 7519), который позволяет безопасно передавать данные между сторонами в виде компактного JSON-объекта)
